@@ -480,12 +480,14 @@ function getCanvasPos(e, canvas) {
   const rect = canvas.getBoundingClientRect();
   const scaleX = canvas.width / rect.width;
   const scaleY = canvas.height / rect.height;
-  const src = e.touches ? e.touches[0] : e;
+  // touchend 時 e.touches 是空的，必須用 e.changedTouches
+  const src = e.changedTouches ? e.changedTouches[0] : (e.touches ? e.touches[0] : e);
   return { x: (src.clientX - rect.left) * scaleX, y: (src.clientY - rect.top) * scaleY };
 }
 
 circuitCanvas.addEventListener('click', e => handleCircuitClick(getCanvasPos(e, circuitCanvas)));
-circuitCanvas.addEventListener('touchend', e => { e.preventDefault(); handleCircuitClick(getCanvasPos(e, circuitCanvas)); }, { passive:false });
+circuitCanvas.addEventListener('touchstart', e => e.preventDefault(), { passive: false });
+circuitCanvas.addEventListener('touchend', e => { e.preventDefault(); handleCircuitClick(getCanvasPos(e, circuitCanvas)); }, { passive: false });
 
 function segHitTest(seg, px, py) {
   const dx = seg.x2 - seg.x1, dy = seg.y2 - seg.y1;
@@ -494,7 +496,7 @@ function segHitTest(seg, px, py) {
   let t = ((px-seg.x1)*dx + (py-seg.y1)*dy) / len2;
   t = Math.max(0, Math.min(1, t));
   const cx2 = seg.x1 + t*dx, cy2 = seg.y1 + t*dy;
-  return Math.hypot(px-cx2, py-cy2) < 18;
+  return Math.hypot(px-cx2, py-cy2) < 28;
 }
 
 function bulbHitTest(bulb, px, py) {
