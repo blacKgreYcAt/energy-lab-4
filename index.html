@@ -214,7 +214,7 @@
   </div>
   <div class="missions-grid">
 
-    <div class="mission-card m1" onclick="showScreen('circuit')">
+    <div class="mission-card m1" data-screen="circuit">
       <div class="mission-num">// 任務一</div>
       <span class="mission-icon">⚡</span>
       <div class="mission-title">黑暗村莊電路解謎</div>
@@ -222,7 +222,7 @@
       <div class="mission-arrow">開始任務 →</div>
     </div>
 
-    <div class="mission-card m2" onclick="showScreen('conductor')">
+    <div class="mission-card m2" data-screen="conductor">
       <div class="mission-num">// 任務二</div>
       <span class="mission-icon">🔬</span>
       <div class="mission-title">抓出絕緣體</div>
@@ -230,7 +230,7 @@
       <div class="mission-arrow">開始任務 →</div>
     </div>
 
-    <div class="mission-card m3" onclick="showScreen('energy')">
+    <div class="mission-card m3" data-screen="energy">
       <div class="mission-num">// 任務三</div>
       <span class="mission-icon">🌿</span>
       <div class="mission-title">節能小尖兵</div>
@@ -251,9 +251,9 @@
   </div>
 
   <div class="level-row" id="levelRow">
-    <button class="lvl-btn active" onclick="loadLevel(0,this)">Lv.1 基本通路</button>
-    <button class="lvl-btn" onclick="loadLevel(1,this)">Lv.2 短路危機</button>
-    <button class="lvl-btn" onclick="loadLevel(2,this)">Lv.3 並聯燈泡</button>
+    <button class="lvl-btn active" data-level="0">Lv.1 基本通路</button>
+    <button class="lvl-btn" data-level="1">Lv.2 短路危機</button>
+    <button class="lvl-btn" data-level="2">Lv.3 並聯燈泡</button>
   </div>
 
   <div class="canvas-wrap">
@@ -263,7 +263,7 @@
   <div class="status-bar" id="circuitStatus">👆 點擊虛線電線來連接電路</div>
 
   <div style="display:flex;gap:.7rem;align-items:center;flex-wrap:wrap;justify-content:center">
-    <button class="reset-btn" onclick="resetLevel()">↺ 重置電路</button>
+    <button class="reset-btn" id="resetBtn">↺ 重置電路</button>
     <div id="circuitHint" style="font-size:.8rem;color:var(--dim);max-width:360px;text-align:center"></div>
   </div>
 </div>
@@ -335,7 +335,7 @@
   <span class="celeb-icon" id="celebIcon">🏆</span>
   <div class="celeb-title" id="celebTitle"></div>
   <div class="celeb-desc"  id="celebDesc"></div>
-  <button class="celeb-home" onclick="hideCelebration()">返回任務選單</button>
+  <button class="celeb-home" id="celebHomeBtn">返回任務選單</button>
 </div>
 
 <script>
@@ -343,21 +343,75 @@
    NAV
 ═══════════════════════════════════ */
 const backBtn = document.getElementById('backBtn');
+
 function showScreen(id) {
+  if (!id || typeof id !== 'string') return;
+  const screenEl = document.getElementById('screen-' + id);
+  if (!screenEl) return;
+
   document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
-  document.getElementById('screen-' + id).classList.add('active');
+  screenEl.classList.add('active');
   backBtn.classList.add('show');
-  if (id === 'circuit')   { loadLevel(currentLevel, document.querySelectorAll('.lvl-btn')[currentLevel]); }
+
+  if (id === 'circuit')   { loadLevel(currentLevel, document.querySelectorAll('.lvl-btn')[currentLevel] || null); }
   if (id === 'conductor') { initConductor(); }
   if (id === 'energy')    { initEnergy(); }
 }
+
 function goHome() {
   document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
-  document.getElementById('screen-home').classList.add('active');
+  document.getElementById('screen-home')?.classList.add('active');
   backBtn.classList.remove('show');
-  cancelAnimationFrame(circuitRaf);
-  cancelAnimationFrame(conductorRaf);
-  cancelAnimationFrame(energyRaf);
+
+  // Clean up animation frames
+  if (circuitRaf) cancelAnimationFrame(circuitRaf);
+  if (conductorRaf) cancelAnimationFrame(conductorRaf);
+  if (energyRaf) cancelAnimationFrame(energyRaf);
+
+  // Reset game states
+  currentLevel = 0;
+  activeSegs.clear();
+  burnedBulb = null;
+  circuitDone = {};
+  selectedItem = null;
+  foundConductors.clear();
+  fixedHS.clear();
+  celebratedGames = {};
+}
+
+// Event delegation for mission cards
+document.addEventListener('click', (e) => {
+  const card = e.target.closest('[data-screen]');
+  if (card) {
+    const screenId = card.dataset.screen;
+    showScreen(screenId);
+  }
+});
+
+// Level button delegation
+const levelRow = document.getElementById('levelRow');
+if (levelRow) {
+  levelRow.addEventListener('click', (e) => {
+    const btn = e.target.closest('[data-level]');
+    if (btn) {
+      const level = parseInt(btn.dataset.level, 10);
+      if (!isNaN(level) && level >= 0 && level < LEVELS.length) {
+        loadLevel(level, btn);
+      }
+    }
+  });
+}
+
+// Reset button delegation
+const resetBtn = document.getElementById('resetBtn');
+if (resetBtn) {
+  resetBtn.addEventListener('click', resetLevel);
+}
+
+// Celebration home button delegation
+const celebHomeBtn = document.getElementById('celebHomeBtn');
+if (celebHomeBtn) {
+  celebHomeBtn.addEventListener('click', hideCelebration);
 }
 
 /* ═══════════════════════════════════
@@ -457,16 +511,28 @@ let circuitRaf;
 let circuitDone = {};
 
 function loadLevel(idx, btnEl) {
+  if (idx == null || idx < 0 || idx >= LEVELS.length) return;
+
   currentLevel = idx;
   const lvl = LEVELS[idx];
+  if (!lvl) return;
+
   activeSegs = new Set(lvl.startActive || []);
   burnedBulb = null;
-  document.getElementById('circuitStatus').className = 'status-bar';
-  document.getElementById('circuitStatus').textContent = '👆 ' + lvl.hint;
-  document.getElementById('circuitHint').textContent = '';
+
+  const statusEl = document.getElementById('circuitStatus');
+  if (statusEl) {
+    statusEl.className = 'status-bar';
+    statusEl.textContent = '👆 ' + (lvl.hint || '繼續連接電線！');
+  }
+
+  const hintEl = document.getElementById('circuitHint');
+  if (hintEl) hintEl.textContent = '';
+
   document.querySelectorAll('.lvl-btn').forEach(b => b.classList.remove('active'));
   if (btnEl) btnEl.classList.add('active');
-  cancelAnimationFrame(circuitRaf);
+
+  if (circuitRaf) cancelAnimationFrame(circuitRaf);
   circuitLoop();
 }
 
@@ -785,45 +851,84 @@ let foundConductors = new Set();
 let conductorRaf;
 
 function initConductor() {
-  selectedItem = null; foundConductors = new Set();
-  document.getElementById('conductorStatus').className = 'status-bar';
-  document.getElementById('conductorStatus').textContent = '👆 從下方選擇一個物品，放入電路缺口測試！';
-  ITEMS.forEach(it => document.getElementById('fg-'+it.id) && (document.getElementById('fg-'+it.id).className='fg-card'));
+  selectedItem = null;
+  foundConductors = new Set();
+
+  const statusEl = document.getElementById('conductorStatus');
+  if (statusEl) {
+    statusEl.className = 'status-bar';
+    statusEl.textContent = '👆 從下方選擇一個物品，放入電路缺口測試！';
+  }
+
+  ITEMS.forEach(it => {
+    const fgEl = document.getElementById('fg-' + it.id);
+    if (fgEl) fgEl.className = 'fg-card';
+  });
+
   buildItemBtns();
-  cancelAnimationFrame(conductorRaf);
+  if (conductorRaf) cancelAnimationFrame(conductorRaf);
   conductorLoop();
 }
 
 function buildItemBtns() {
   const row = document.getElementById('conductorItems');
-  row.innerHTML = '';
+  if (!row) return;
+
+  // Clear existing buttons
+  while (row.firstChild) row.removeChild(row.firstChild);
+
   ITEMS.forEach(it => {
     const btn = document.createElement('button');
     btn.className = 'act-btn';
     btn.id = 'itbtn-' + it.id;
-    btn.innerHTML = `<span class="ai">${it.icon}</span>${it.id}`;
-    btn.onclick = () => testItem(it, btn);
+    btn.dataset.itemId = it.id;
+
+    // Use DOM API instead of innerHTML
+    const iconSpan = document.createElement('span');
+    iconSpan.className = 'ai';
+    iconSpan.textContent = it.icon;
+
+    const labelSpan = document.createElement('span');
+    labelSpan.textContent = it.id;
+
+    btn.appendChild(iconSpan);
+    btn.appendChild(labelSpan);
+
+    btn.addEventListener('click', () => testItem(it, btn));
     row.appendChild(btn);
   });
 }
 
 function testItem(item, btn) {
-  document.querySelectorAll('.act-btn').forEach(b => b.classList.remove('selected','correct','wrong'));
+  if (!item || !btn) return;
+
+  document.querySelectorAll('.act-btn').forEach(b => b.classList.remove('selected', 'correct', 'wrong'));
   selectedItem = item;
   btn.classList.add('selected');
 
   setTimeout(() => {
     const el = document.getElementById('conductorStatus');
-    if (item.conductor) {
-      btn.classList.remove('selected'); btn.classList.add('correct');
+    if (!el) {
+      selectedItem = null;
+      return;
+    }
+
+    if (item?.conductor) {
+      btn.classList.remove('selected');
+      btn.classList.add('correct');
       el.className = 'status-bar ok';
       el.textContent = `✅ ${item.icon} ${item.id} — ${item.desc} 燈泡亮了！`;
       foundConductors.add(item.id);
+
       const fg = document.getElementById('fg-' + item.id);
       if (fg) fg.className = 'fg-card found';
-      if (foundConductors.size === 3) setTimeout(() => showCelebration('conductor'), 600);
+
+      if (foundConductors.size === 3) {
+        setTimeout(() => showCelebration('conductor'), 600);
+      }
     } else {
-      btn.classList.remove('selected'); btn.classList.add('wrong');
+      btn.classList.remove('selected');
+      btn.classList.add('wrong');
       el.className = 'status-bar warn';
       el.textContent = `❌ ${item.icon} ${item.id} — ${item.desc} 燈泡沒亮。`;
     }
@@ -933,26 +1038,51 @@ const celebratedGames = {};
 
 function initEnergy() {
   fixedHS = new Set();
-  document.getElementById('energyScore').innerHTML = '0<span>/ 4 個問題修正</span>';
+
+  const scoreEl = document.getElementById('energyScore');
+  if (scoreEl) {
+    while (scoreEl.firstChild) scoreEl.removeChild(scoreEl.firstChild);
+    const countNode = document.createTextNode('0');
+    scoreEl.appendChild(countNode);
+    const spanEl = document.createElement('span');
+    spanEl.textContent = '/ 4 個問題修正';
+    scoreEl.appendChild(spanEl);
+  }
+
   HOTSPOTS.forEach(h => {
-    document.getElementById(h.badge).className = 'badge-item';
+    const badgeEl = document.getElementById(h.badge);
+    if (badgeEl) badgeEl.className = 'badge-item';
   });
+
   buildHotspots();
-  cancelAnimationFrame(energyRaf);
+  if (energyRaf) cancelAnimationFrame(energyRaf);
   energyLoop();
 }
 
 function buildHotspots() {
   const wrap = document.getElementById('roomWrap');
+  if (!wrap) return;
+
   wrap.querySelectorAll('.room-hotspot').forEach(el => el.remove());
+
   HOTSPOTS.forEach(hs => {
     const div = document.createElement('div');
     div.className = 'room-hotspot';
     div.id = 'hs-' + hs.id;
-    div.style.cssText = `left:${hs.x};top:${hs.y};width:${hs.w};height:${hs.h}`;
+    div.style.left = hs.x;
+    div.style.top = hs.y;
+    div.style.width = hs.w;
+    div.style.height = hs.h;
     div.title = hs.desc;
-    div.innerHTML = `<span style="font-size:1.8rem">${hs.icon}</span>`;
-    div.onclick = () => fixHotspot(hs);
+    div.dataset.hsId = hs.id;
+
+    // Use DOM API instead of innerHTML
+    const span = document.createElement('span');
+    span.style.fontSize = '1.8rem';
+    span.textContent = hs.icon;
+    div.appendChild(span);
+
+    div.addEventListener('click', () => fixHotspot(hs));
     wrap.appendChild(div);
   });
 }
@@ -960,11 +1090,35 @@ function buildHotspots() {
 function fixHotspot(hs) {
   if (fixedHS.has(hs.id)) return;
   fixedHS.add(hs.id);
+
   const div = document.getElementById('hs-' + hs.id);
-  if (div) { div.classList.add('fixed'); div.innerHTML = `<span style="font-size:1.8rem">✅</span>`; }
-  document.getElementById(hs.badge).className = 'badge-item earned';
-  document.getElementById('energyScore').innerHTML = `${fixedHS.size}<span>/ 4 個問題修正</span>`;
-  if (fixedHS.size === HOTSPOTS.length) setTimeout(() => showCelebration('energy'), 600);
+  if (div) {
+    div.classList.add('fixed');
+    // Clear and use DOM API instead of innerHTML
+    while (div.firstChild) div.removeChild(div.firstChild);
+    const span = document.createElement('span');
+    span.style.fontSize = '1.8rem';
+    span.textContent = '✅';
+    div.appendChild(span);
+  }
+
+  const badgeEl = document.getElementById(hs.badge);
+  if (badgeEl) badgeEl.className = 'badge-item earned';
+
+  const scoreEl = document.getElementById('energyScore');
+  if (scoreEl) {
+    // Clear and rebuild score display
+    while (scoreEl.firstChild) scoreEl.removeChild(scoreEl.firstChild);
+    const countNode = document.createTextNode(String(fixedHS.size));
+    scoreEl.appendChild(countNode);
+    const spanEl = document.createElement('span');
+    spanEl.textContent = '/ 4 個問題修正';
+    scoreEl.appendChild(spanEl);
+  }
+
+  if (fixedHS.size === HOTSPOTS.length) {
+    setTimeout(() => showCelebration('energy'), 600);
+  }
 }
 
 function energyLoop() {
@@ -1068,21 +1222,33 @@ function drawRoom() {
    CELEBRATION
 ═══════════════════════════════════ */
 function showCelebration(game) {
-  if (celebratedGames[game]) return;
+  if (!game || celebratedGames[game]) return;
+
   celebratedGames[game] = true;
-  const c = {
+
+  const configs = {
     circuit:   { icon:'⚡', title:'電路大師誕生！',   desc:'你已經學會通路、短路和並聯電路了！\n電學難不倒你！' },
     conductor: { icon:'🔬', title:'電學圖鑑集滿了！', desc:'銅、迴紋針、鉛筆芯是良導體，\n塑膠、橡皮擦、木頭是絕緣體，記住了嗎？' },
     energy:    { icon:'🌿', title:'低碳小英雄！',     desc:'你找出了所有浪費電的地方並修正！\n節能愛地球，你是最棒的！' },
   };
-  const cfg = c[game];
-  document.getElementById('celebIcon').textContent  = cfg.icon;
-  document.getElementById('celebTitle').textContent = cfg.title;
-  document.getElementById('celebDesc').textContent  = cfg.desc;
-  document.getElementById('celebration').classList.add('show');
+
+  const cfg = configs[game];
+  if (!cfg) return;
+
+  const iconEl = document.getElementById('celebIcon');
+  const titleEl = document.getElementById('celebTitle');
+  const descEl = document.getElementById('celebDesc');
+  const celebEl = document.getElementById('celebration');
+
+  if (iconEl) iconEl.textContent = cfg.icon;
+  if (titleEl) titleEl.textContent = cfg.title;
+  if (descEl) descEl.textContent = cfg.desc;
+  if (celebEl) celebEl.classList.add('show');
 }
+
 function hideCelebration() {
-  document.getElementById('celebration').classList.remove('show');
+  const celebEl = document.getElementById('celebration');
+  if (celebEl) celebEl.classList.remove('show');
   goHome();
 }
 
